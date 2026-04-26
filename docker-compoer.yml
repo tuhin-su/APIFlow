@@ -1,0 +1,27 @@
+version: "3.9"
+
+services:
+  flowgo:
+    build: .
+    container_name: flowgo
+    restart: unless-stopped
+
+    volumes:
+      - ./config.json:/app/config.json:ro
+
+    environment:
+      - TZ=Asia/Kolkata
+
+    networks:
+      - flowgo-net
+
+    # Optional resource limits (production safety)
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+networks:
+  flowgo-net:
+    driver: bridge
