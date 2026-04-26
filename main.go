@@ -3,28 +3,33 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 )
 
+var version = "dev"
+var vars = map[string]string{}
+
 type Config struct {
-	AppURL   string            `json:"app_url"`
-	Loop     int               `json:"loop"`
-	Delay    int               `json:"delay"`
-	Headers  map[string]string `json:"headers"`
-	Proxy    *ProxyConfig      `json:"proxy,omitempty"`
-	Endpoints []Endpoint       `json:"endpoints"`
+	AppURL    string            `json:"app_url"`
+	Loop      int               `json:"loop"`
+	Delay     int               `json:"delay"`
+	Headers   map[string]string `json:"headers"`
+	Proxy     *ProxyConfig      `json:"proxy,omitempty"`
+	Endpoints []Endpoint        `json:"endpoints"`
 }
 
 type ProxyConfig struct {
-	URL      string `json:"url"`      // http://host:port
-	Username string `json:"username"` // optional
-	Password string `json:"password"` // optional
+	URL      string `json:"url"`
+	Username string `json:"username"`
+	Password string `json:"password"`
 }
 
 type Endpoint struct {
@@ -35,32 +40,59 @@ type Endpoint struct {
 	Set    map[string]string      `json:"set,omitempty"`
 }
 
-var vars = map[string]string{}
-
 func main() {
-	// Load config (you can replace with file read)
-	configJSON := `PASTE_YOUR_JSON_HERE`
+	configPath := flag.String("load", "", "Path to config file")
+	configPathShort := flag.String("l", "", "Path to config file (shorthand)")
+	showVersion := flag.Bool("v", false, "Show version")
 
-	var cfg Config
-	err := json.Unmarshal([]byte(configJSON), &cfg)
-	if err != nil {
-		panic(err)
+	flag.Parse()
+
+	if *showVersion {
+		fmt.Println("Version:", version)
+		return
 	}
 
+	path := *configPath
+	if path == "" {
+		path = *configPathShort
+	}
+
+	if path == "" {
+		fmt.Println("❌ Config file required")
+		fmt.Println("Usage: flowgo --load config.json")
+		os.Exit(1)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		fmt.Println("❌ Failed to read file:", err)
+		os.Exit(1)
+	}
+
+	var cfg Config
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		fmt.Println("❌ Invalid JSON:", err)
+		os.Exit(1)
+	}
+
+	run(cfg)
+}
+
+func run(cfg Config) {
 	client := buildHTTPClient(cfg.Proxy)
 
 	loop := cfg.Loop
 	if loop == -1 {
-		loop = int(^uint(0) >> 1) // simulate infinite
+		loop = int(^uint(0) >> 1)
 	}
 
 	for i := 0; i < loop; i++ {
-		fmt.Println("Loop:", i+1)
+		fmt.Println("🔁 Loop:", i+1)
 
 		for _, ep := range cfg.Endpoints {
 			err := executeEndpoint(client, cfg, ep)
 			if err != nil {
-				fmt.Println("Error:", err)
+				fmt.Println("❌ Error:", err)
 				break
 			}
 		}
@@ -108,7 +140,6 @@ func executeEndpoint(client *http.Client, cfg Config, ep Endpoint) error {
 		return err
 	}
 
-	// headers
 	for k, v := range cfg.Headers {
 		req.Header.Set(k, replaceVars(v))
 	}
@@ -121,18 +152,16 @@ func executeEndpoint(client *http.Client, cfg Config, ep Endpoint) error {
 
 	respBody, _ := io.ReadAll(resp.Body)
 
-	fmt.Println("==>", ep.Name, resp.Status)
+	fmt.Println("➡️", ep.Name, resp.Status)
 
-	// parse JSON response
 	var jsonResp map[string]interface{}
 	json.Unmarshal(respBody, &jsonResp)
 
-	// handle "set"
 	for key, path := range ep.Set {
 		val := extractFromJSON(jsonResp, path)
 		if val != "" {
 			vars[key] = val
-			fmt.Println("SET", key, "=", val)
+			fmt.Println("🔐 SET", key, "=", val)
 		}
 	}
 
@@ -159,7 +188,6 @@ func replaceVarsInMap(m map[string]interface{}) map[string]interface{} {
 	return newMap
 }
 
-// simple dot path extractor (e.g. body.token)
 func extractFromJSON(data map[string]interface{}, path string) string {
 	parts := strings.Split(path, ".")
 	var current interface{} = data
