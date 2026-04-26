@@ -1,0 +1,39 @@
+{
+  "app_url": "http://app.test",
+  "loop": 10,
+  "delay": 1000,
+  "proxy": {
+    "url": "http://127.0.0.1:8080",
+    "username": "user",
+    "password": "pass"
+  },
+  "headers": {
+    "Accept": "application/json",
+    "Content-Type": "application/json",
+    "Authorization": "Bearer @token"
+  },
+  "endpoints": [
+    {
+      "name": "Login",
+      "url": "/api/auth/login",
+      "method": "POST",
+      "body": {
+        "email": "test@example.com",
+        "password": "password"
+      },
+      "set": {
+        "@token": "token"
+      }
+    },
+    {
+      "name": "Get Profile",
+      "url": "/api/auth/me",
+      "method": "GET"
+    },
+    {
+      "name": "Logout",
+      "url": "/api/auth/logout",
+      "method": "POST"
+    }
+  ]
+}
